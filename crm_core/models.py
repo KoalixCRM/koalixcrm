@@ -2,6 +2,7 @@
 
 from datetime import date, timedelta
 from decimal import Decimal
+
 from django.conf import settings
 from django.db import models, transaction
 from django.template.loader import render_to_string
@@ -10,15 +11,15 @@ from django.core.urlresolvers import reverse
 from filebrowser_safe.fields import FileBrowseField
 from django_fsm import FSMIntegerField
 from mezzanine.core.models import Displayable
+from cartridge.shop import models as cartridge_models
 from os import path
 import reversion
 from weasyprint import HTML
 from international.models import countries, currencies, countries_raw
-from const.postaladdressprefix import PostalAddressPrefix
-from const.purpose import PhoneAddressPurpose, PostalAddressPurpose, EmailAddressPurpose
-from const.states import ContractStatesEnum, ContractStatesLabelEnum
+from const.postaladdressprefix import POSTAL_ADDRESS_PREFIX_CHOICES
+from const.purpose import POSTAL_ADDRESS_PURPOSE_CHOICES, PHONE_ADDRESS_PURPOSE_CHOICES, EMAIL_ADDRESS_PURPOSE_CHOICES
+from const.states import CONTRACT_STATE_CHOICES, CONTRACT_LABEL_CLASS_CHOICES
 from django_extensions.db.fields import CreationDateTimeField, ModificationDateTimeField
-from django.apps import apps as django_apps
 
 
 # ######################
@@ -27,8 +28,8 @@ from django.apps import apps as django_apps
 
 
 class Contact(models.Model):
-    prefix = models.CharField(max_length=1, choices=PostalAddressPrefix.choices, verbose_name=_("Title"), blank=True,
-                              null=True)
+    prefix = models.CharField(max_length=1, choices=POSTAL_ADDRESS_PREFIX_CHOICES,
+                              verbose_name=_("Title"), blank=True, null=True)
     name = models.CharField(max_length=300, verbose_name=_("Name"))
     dateofcreation = CreationDateTimeField(verbose_name=_("Created at"))
     lastmodification = ModificationDateTimeField(verbose_name=_("Last modified"))
@@ -38,7 +39,21 @@ class Contact(models.Model):
 
     @property
     def get_prefix(self):
-        return PostalAddressPrefix.choices[self.prefix]
+        if self.prefix:
+            for choice in POSTAL_ADDRESS_PREFIX_CHOICES:
+                if self.prefix == choice[0]:
+                    return choice[1]
+        return ""
+
+    @transaction.atomic()
+    @reversion.create_revision()
+    def save(self, *args, **kwargs):
+        super(Contact, self).save(*args, **kwargs)
+
+    def __unicode__(self):
+        if self.prefix:
+            return "%s %s" % (self.get_prefix, self.name)
+        return self.name
 
 
 # #########################
@@ -50,7 +65,7 @@ class CustomerBillingCycle(models.Model):
     name = models.CharField(max_length=300, verbose_name=_("Name"))
     days_to_payment = models.IntegerField(verbose_name=_("Days to Payment Date"))
 
-    class Meta():
+    class Meta:
         verbose_name = _('Customer Billing Cycle')
         verbose_name_plural = _('Customer Billing Cycle')
         permissions = (
@@ -67,7 +82,7 @@ class CustomerGroup(models.Model):
     def __unicode__(self):
         return self.name
 
-    class Meta():
+    class Meta:
         verbose_name = _('Customer Group')
         verbose_name_plural = _('Customer Groups')
         permissions = (
@@ -82,11 +97,11 @@ class PostalAddress(models.Model):
     city = models.CharField(max_length=100, verbose_name=_("City"), blank=True, null=True)
     state = models.CharField(max_length=100, verbose_name=_("State"), blank=True, null=True)
     country = models.CharField(max_length=2, choices=countries, verbose_name=_("Country"), blank=True, null=True)
-    purpose = models.CharField(verbose_name=_("Purpose"), max_length=1, choices=PostalAddressPurpose.choices,
-                               default=PostalAddressPurpose.ContactAddress)
+    purpose = models.CharField(verbose_name=_("Purpose"), max_length=1, choices=POSTAL_ADDRESS_PURPOSE_CHOICES,
+                               default='C')
     person = models.ForeignKey(Contact, related_name='addresses')
 
-    class Meta():
+    class Meta:
         verbose_name = _('Postal Address')
         verbose_name_plural = _('Postal Address')
         permissions = (
@@ -94,7 +109,10 @@ class PostalAddress(models.Model):
         )
 
     def get_purpose(self):
-        return PostalAddressPurpose.choices[self.purpose]
+        for purpose in POSTAL_ADDRESS_PURPOSE_CHOICES:
+            if self.purpose == purpose[0]:
+                return purpose[1]
+        return ""
 
     def get_country(self):
         return list(c[4].partition(',')[0].partition('(')[0].strip() for c in countries_raw if c[1] == self.country)[0]
@@ -115,11 +133,11 @@ class PostalAddress(models.Model):
 
 class PhoneAddress(models.Model):
     phone = models.CharField(max_length=20, verbose_name=_("Phone Number"))
-    purpose = models.CharField(verbose_name=_("Purpose"), max_length=1, choices=PhoneAddressPurpose.choices,
-                               default=PhoneAddressPurpose.Private)
+    purpose = models.CharField(verbose_name=_("Purpose"), max_length=1, choices=PHONE_ADDRESS_PURPOSE_CHOICES,
+                               default='H')
     person = models.ForeignKey(Contact, related_name='phonenumbers')
 
-    class Meta():
+    class Meta:
         verbose_name = _('Phone Address')
         verbose_name_plural = _('Phone Address')
         permissions = (
@@ -127,7 +145,10 @@ class PhoneAddress(models.Model):
         )
 
     def get_purpose(self):
-        return PhoneAddressPurpose.choices[self.purpose]
+        for purpose in PHONE_ADDRESS_PURPOSE_CHOICES:
+            if self.purpose == purpose[0]:
+                return purpose[1]
+        return ""
 
     def __unicode__(self):
         return "%s: %s" % (self.get_purpose(), self.phone)
@@ -135,11 +156,11 @@ class PhoneAddress(models.Model):
 
 class EmailAddress(models.Model):
     email = models.EmailField(max_length=200, verbose_name=_("Email Address"))
-    purpose = models.CharField(verbose_name=_("Purpose"), max_length=1, choices=EmailAddressPurpose.choices,
-                               default=EmailAddressPurpose.Private)
+    purpose = models.CharField(verbose_name=_("Purpose"), max_length=1, choices=EMAIL_ADDRESS_PURPOSE_CHOICES,
+                               default='H')
     person = models.ForeignKey(Contact, related_name='emailaddresses')
 
-    class Meta():
+    class Meta:
         verbose_name = _('Email Address')
         verbose_name_plural = _('Email Address')
         permissions = (
@@ -147,7 +168,10 @@ class EmailAddress(models.Model):
         )
 
     def get_purpose(self):
-        return EmailAddressPurpose.choices[self.purpose]
+        for purpose in EMAIL_ADDRESS_PURPOSE_CHOICES:
+            if self.purpose == purpose[0]:
+                return purpose[1]
+        return ""
 
     def __unicode__(self):
         return "%s: %s" % (self.get_purpose(), self.email)
@@ -163,7 +187,7 @@ class Customer(Contact):
     billingcycle = models.ForeignKey(CustomerBillingCycle, verbose_name=_('Default Billing Cycle'))
     ismemberof = models.ManyToManyField(CustomerGroup, verbose_name=_('Is member of'), blank=True, null=True)
 
-    class Meta():
+    class Meta:
         verbose_name = _('Customer')
         verbose_name_plural = _('Customers')
         permissions = (
@@ -184,53 +208,53 @@ class Customer(Contact):
 
     def get_invoice_address(self):
         for address in self.addresses.all():
-            if address.purpose == PostalAddressPurpose.BillingAddress:
+            if address.purpose == 'B':
                 return address
-            elif address.purpose == PostalAddressPurpose.DeliveryAddress:
+            elif address.purpose == 'D':
                 return address
-            elif address.purpose == PostalAddressPurpose.ContactAddress:
+            elif address.purpose == 'C':
                 return address
         return "No Address"
 
     def get_quote_address(self):
         for address in self.addresses.all():
-            if address.purpose == PostalAddressPurpose.BillingAddress:
+            if address.purpose == 'B':
                 return address
-            elif address.purpose == PostalAddressPurpose.DeliveryAddress:
+            elif address.purpose == 'D':
                 return address
-            elif address.purpose == PostalAddressPurpose.ContactAddress:
+            elif address.purpose == 'C':
                 return address
         return "No Address"
 
     def get_contact_address(self):
         for address in self.addresses.all():
-            if address.purpose == PostalAddressPurpose.ContactAddress:
+            if address.purpose == 'C':
                 return address
-            elif address.purpose == PostalAddressPurpose.BillingAddress:
+            elif address.purpose == 'B':
                 return address
-            elif address.purpose == PostalAddressPurpose.DeliveryAddress:
+            elif address.purpose == 'D':
                 return address
         return "No Address"
 
     def get_phone_address(self):
         for pn in self.phonenumbers.all():
-            if pn.purpose == PhoneAddressPurpose.Business:
+            if pn.purpose == 'O':
                 return pn
-            elif pn.purpose == PhoneAddressPurpose.MobileBusiness:
+            elif pn.purpose == 'B':
                 return pn
-            elif pn.purpose == PhoneAddressPurpose.Private:
+            elif pn.purpose == 'H':
                 return pn
-            elif pn.purpose == PhoneAddressPurpose.MobilePrivate:
+            elif pn.purpose == 'P':
                 return pn
         return "No Phone"
 
     def get_email_address(self):
-        for pn in self.phonenumbers.all():
-            if pn.purpose == PhoneAddressPurpose.Business:
-                return pn
-            elif pn.purpose == PhoneAddressPurpose.Private:
-                return pn
-        return "No Phone"
+        for ea in self.emailaddresses.all():
+            if ea.purpose == 'O':
+                return ea
+            elif ea.purpose == 'H':
+                return ea
+        return "No email address"
 
     def create_invoice(self, request):
         contract = self.create_contract(request)
@@ -253,19 +277,23 @@ class Customer(Contact):
                 return 1
         return 0
 
+    def short_name(self):
+        if self.firstname:
+            return "%s %s" % (self.firstname, self.name)
+        return self.name
+
     def __unicode__(self):
         if self.prefix and self.firstname:
             return "%s %s %s" % (self.get_prefix, self.firstname, self.name)
-        elif self.firstname:
-            return "%s %s" % (self.firstname, self.name)
-        return self.name
+        else:
+            return self.short_name()
 
 
 class Supplier(Contact):
     direct_shipment_to_customers = models.BooleanField(verbose_name=_("Offers direct Shipment to Customer"),
                                                        default=False)
 
-    class Meta():
+    class Meta:
         verbose_name = _("Supplier")
         verbose_name_plural = _("Suppliers")
         permissions = (
@@ -277,7 +305,7 @@ class Supplier(Contact):
 
     def __unicode__(self):
         if self.prefix:
-            return '%s %s' % (self.get_prefix, self.name)
+            return "%s %s" % (self.get_prefix, self.name)
         return self.name
 
 
@@ -287,7 +315,7 @@ class Supplier(Contact):
 
 
 class Contract(models.Model):
-    state = FSMIntegerField(default=ContractStatesEnum.Open, choices=ContractStatesEnum.choices)
+    state = FSMIntegerField(default=10, choices=CONTRACT_STATE_CHOICES)
     staff = models.ForeignKey(settings.AUTH_USER_MODEL, limit_choices_to={'is_staff': True}, blank=True,
                               verbose_name=_("Staff"), related_name="db_relcontractstaff", null=True)
     description = models.TextField(verbose_name=_("Description"), blank=True, null=True)
@@ -301,13 +329,23 @@ class Contract(models.Model):
                                        verbose_name=_("Last modified by"), related_name="db_contractlstmodified",
                                        null=True)
 
-    class Meta():
+    class Meta:
         verbose_name = _('Contract')
         verbose_name_plural = _('Contracts')
         permissions = (
             ('view_contract', 'Can view contracts'),
         )
         get_latest_by = 'lastmodification'
+
+    def get_price(self):
+        res = "N/A"
+        if self.has_quotes() and not self.has_invoices() and not self.has_purchaseorders():
+            res = str(self.quotes.last().get_price()) + " " + self.default_currency
+        elif self.has_purchaseorders() and not self.has_invoices():
+            res = str(self.purchaseorders.last().get_price()) + " " + self.default_currency
+        elif self.has_invoices():
+            res = str(self.invoices.last().get_price()) + " " + self.default_currency
+        return res
 
     def create_invoice(self):
         invoice = Invoice()
@@ -320,7 +358,7 @@ class Contract(models.Model):
         invoice.payableuntil = date.today() + timedelta(days=self.default_customer.billingcycle.days_to_payment)
         invoice.dateofcreation = date.today().__str__()
         invoice.save()
-        self.state = ContractStatesEnum.Invoice_created
+        self.state = 30
         self.save()
         return invoice
 
@@ -332,10 +370,10 @@ class Contract(models.Model):
         quote.customer = self.default_customer
         quote.status = 1
         quote.currency = self.default_currency
-        quote.validuntil = date.today().__str__()
-        quote.dateofcreation = date.today().__str__()
+        quote.validuntil = date.today()
+        quote.dateofcreation = date.today()
         quote.save()
-        self.state = ContractStatesEnum.Quote_created
+        self.state = 50
         self.save()
         return quote
 
@@ -348,10 +386,9 @@ class Contract(models.Model):
         purchaseorder.currency = self.default_currency
         purchaseorder.supplier = self.default_supplier
         purchaseorder.status = 1
-        purchaseorder.dateofcreation = date.today().__str__()
-        # TODO: today is not correct it has to be replaced
+        purchaseorder.dateofcreation = date.today()
         purchaseorder.save()
-        self.state = ContractStatesEnum.PurchaseOrder_created
+        self.state = 70
         self.save()
         return purchaseorder
 
@@ -359,10 +396,16 @@ class Contract(models.Model):
         return _('Contract') + ' #' + str(self.id)
 
     def get_state(self):
-        return ContractStatesEnum.choices[self.state]
+        for state in CONTRACT_STATE_CHOICES:
+            if self.state == state[0]:
+                return state[1]
+        return "Unknown"
 
     def get_state_class(self):
-        return ContractStatesLabelEnum.choices[self.state]
+        for state in CONTRACT_LABEL_CLASS_CHOICES:
+            if self.state == state[0]:
+                return state[1]
+        return "default"
 
     def get_absolute_url(self):
         url = '/contracts/detail/' + str(self.pk)  # TODO: Bad solution
@@ -421,13 +464,16 @@ class PurchaseOrder(models.Model):
     derived_from_quote = models.ForeignKey('Quote', related_name='purchaseorders', null=True, blank=True)
     pdf_path = models.CharField(max_length=200, null=True, blank=True, editable=False)
 
-    class Meta():
+    class Meta:
         verbose_name = _('Purchase Order')
         verbose_name_plural = _('Purchase Order')
         permissions = (
             ('view_purchaseorder', 'Can view purchase orders'),
         )
         get_latest_by = 'lastmodification'
+
+    def get_price(self):
+        return 10
 
     def recalculate_prices(self, pricing_date):
         price = 0
@@ -479,8 +525,11 @@ class PurchaseOrder(models.Model):
     def get_document_url(self):
         return reverse('purchaseorder_detail', args=[str(self.id)])
 
+    @transaction.atomic()
+    @reversion.create_revision()
     def save(self, *args, **kwargs):
         # self.recalculate_prices(date.today())
+        super(PurchaseOrder, self).save(*args, **kwargs)
         self.create_pdf()
         super(PurchaseOrder, self).save(*args, **kwargs)
 
@@ -539,6 +588,8 @@ class SalesContract(models.Model):
             return 0
 
     # TODO
+    @transaction.atomic()
+    @reversion.create_revision()
     def save(self, *args, **kwargs):
         # self.recalculate_prices(date.today())
         super(SalesContract, self).save(*args, **kwargs)
@@ -548,13 +599,16 @@ class Quote(SalesContract):
     contract = models.ForeignKey(Contract, verbose_name=_('Contract'), related_name='quotes')
     validuntil = models.DateField(verbose_name=_("Valid until"))
 
-    class Meta():
+    class Meta:
         verbose_name = _('Quote')
         verbose_name_plural = _('Quotes')
         permissions = (
             ('view_quote', 'Can view quotes'),
         )
         get_latest_by = "lastmodification"
+
+    def get_price(self):
+        return 20
 
     def create_invoice(self):
         invoice = Invoice()
@@ -624,6 +678,7 @@ class Quote(SalesContract):
     @transaction.atomic()
     @reversion.create_revision()
     def save(self, *args, **kwargs):
+        super(Quote, self).save(*args, **kwargs)
         self.create_pdf()
         super(Quote, self).save(*args, **kwargs)
 
@@ -635,6 +690,17 @@ class Invoice(SalesContract):
     payment_bank_reference = models.CharField(verbose_name=_("Payment Bank Reference"), max_length=100, blank=True,
                                               null=True)
 
+    class Meta:
+        verbose_name = _('Invoice')
+        verbose_name_plural = _('Invoices')
+        permissions = (
+            ('view_invoice', 'Can view invoices'),
+        )
+        get_latest_by = 'lastmodification'
+
+    def get_price(self):
+        return 30
+
     def to_html(self):
         return render_to_string('pdf_templates/invoice.html', {'invoice': self})
 
@@ -644,14 +710,6 @@ class Invoice(SalesContract):
             settings.PROJECT_ROOT, settings.MEDIA_URL, self.pk))
         self.pdf_path = pth
         HTML(string=html, encoding="utf8").write_pdf(target=pth)
-
-    class Meta():
-        verbose_name = _('Invoice')
-        verbose_name_plural = _('Invoices')
-        permissions = (
-            ('view_invoice', 'Can view invoices'),
-        )
-        get_latest_by = 'lastmodification'
 
     def get_absolute_url(self):
         return reverse('invoice_edit', args=[str(self.id)])
@@ -663,6 +721,7 @@ class Invoice(SalesContract):
         return _("Invoice") + " #" + str(self.id)
 
     def save(self, *args, **kwargs):
+        super(Invoice, self).save(*args, **kwargs)
         self.create_pdf()
         super(Invoice, self).save(*args, **kwargs)
 
@@ -674,7 +733,7 @@ class Unit(models.Model):
     factor = models.IntegerField(verbose_name=_("Factor Between This And Next Higher Unit"),
                                  blank=True, null=True)
 
-    class Meta():
+    class Meta:
         verbose_name = _('Unit')
         verbose_name_plural = _('Units')
         permissions = (
@@ -693,7 +752,7 @@ class TaxRate(models.Model):
     def gettaxrate(self):
         return self.taxrate_in_percent
 
-    class Meta():
+    class Meta:
         verbose_name = _('Tax')
         verbose_name_plural = _('Taxes')
         permissions = (
@@ -704,10 +763,9 @@ class TaxRate(models.Model):
         return self.name
 
 
-class ProductCategory(models.Model):
-    title = models.CharField(verbose_name=_("Product Category Title"), max_length=50)
+class ProductCategory(cartridge_models.Category):
 
-    class Meta():
+    class Meta:
         verbose_name = _('Product Category')
         verbose_name_plural = _('Product Categories')
 
@@ -715,108 +773,32 @@ class ProductCategory(models.Model):
         return self.title
 
 
-class ProductItem(models.Model):
-    item_prefix = models.CharField(max_length=10, verbose_name=_('Prefix'), default='#')
-    item_description = models.TextField(verbose_name=_("Description"), null=True, blank=True)
-    item_title = models.CharField(verbose_name=_("Title"), max_length=200)
+class ProductItem(cartridge_models.Product):
     item_unit = models.ForeignKey(Unit, verbose_name=_("Unit"))
     item_tax = models.ForeignKey(TaxRate, blank=False)
-    dateofcreation = CreationDateTimeField(verbose_name=_("Created at"))
-    lastmodification = ModificationDateTimeField(verbose_name=_("Last modified"))
-    lastmodifiedby = models.ForeignKey(settings.AUTH_USER_MODEL, limit_choices_to={'is_staff': True},
-                                       verbose_name=_("Last modified by"), null=True, blank="True")
     item_category = models.ForeignKey(ProductCategory, verbose_name=_("Product Categorie"), null=True, blank=True)
 
-
-# TODO
-class Product(ProductItem):
-    product_number = models.IntegerField(verbose_name=_("Product Number"))
-
-    class Meta():
+    class Meta:
         verbose_name = _('Product')
         verbose_name_plural = _('Products')
         permissions = (
             ('view_product', 'Can view products'),
         )
 
-    def to_cartridge_product(self):
-        if django_apps.is_installed('cartridge'):
-            from cartridge.shop import models
-            cart_prod = models.Product()
-            cart_prod.description = self.item_description
-            cart_prod.save()
-
-    def get_product_number(self):
-        return "%s%s" % (self.item_prefix, self.product_number)
-
-    def get_absolute_url(self):
-        return reverse('product_detail', args=[str(self.id)])
-
     def get_price(self):
-        prices = Price.objects.filter(product=self.id)
-        # if not len(prices) > 0:
-        return 0
-        unit_transforms = UnitTransform.objects.filter(product=self.id)
-        customer_group_transforms = CustomerGroupTransform.objects.filter(product=self.id)
-        validpriceslist = list()
-        for price in list(prices):
-            for customerGroup in CustomerGroup.objects.filter(customer=customer):
-                if price.matches_date_unit_customer_group_currency(date, unit, customerGroup, currency):
-                    validpriceslist.append(price.price)
-                else:
-                    for customerGroupTransform in customer_group_transforms:
-                        if price.matches_date_unit_customer_group_currency(date, unit,
-                                                                           customerGroupTransform.transform(
-                                                                                   customerGroup),
-                                                                           currency):
-                            validpriceslist.append(price.price * customerGroup.factor)
-                        else:
-                            for unitTransfrom in list(unit_transforms):
-                                if price.matches_date_unit_customer_group_currency(date,
-                                                                                   unitTransfrom.transfrom(
-                                                                                           unit).transform(
-                                                                                           unitTransfrom),
-                                                                                   customerGroupTransform.transform(
-                                                                                           customerGroup), currency):
-                                    validpriceslist.append(
-                                        price.price * customerGroupTransform.factor * unitTransfrom.factor)
-        if len(validpriceslist) > 0:
-            lowestprice = validpriceslist[0]
-            for price in validpriceslist:
-                if price < lowestprice:
-                    lowestprice = price
-            return lowestprice
-        else:
-            return 0
+        return self.price()
 
     def get_tax_rate(self):
         return self.item_tax.gettaxrate()
 
-    def save(self, force_insert=False, force_update=False, using=None, update_fields=None):
-        # self.to_cartridge_product()
-        super(Product, self).save(force_insert, force_update, using, update_fields)
-
     def __unicode__(self):
-        return '%s (#%s)' % (self.item_title, str(self.product_number))
-
-    class NoPriceFound(Exception):
-        def __init__(self, customer, unit, date, product):
-            self.customer = customer
-            self.unit = unit
-            self.date = date
-            self.product = product
-            return
-
-        def __str__(self):
-            return _("There is no Price for this product") + ": " + self.product.__unicode__() + _(
-                "that matches the date") + ": " + self.date.__str__() + " ," + _(
-                "customer") + ": " + self.customer.__unicode__() + _(" and unit") + ":" + self.unit.__unicode__()
+        return '%s (#%s)' % (self.title, str(self.pk))
 
 
 class UnitTransform(models.Model):
     from_unit = models.ForeignKey(Unit, verbose_name=_("From Unit"), related_name="db_reltransformfromunit")
     to_unit = models.ForeignKey(Unit, verbose_name=_("To Unit"), related_name="db_reltransformtounit")
-    product = models.ForeignKey(Product, verbose_name=_("Product"))
+    product = models.ForeignKey(ProductItem, verbose_name=_("Product"))
     factor = models.IntegerField(verbose_name=_("Factor between From and To Unit"), blank=True, null=True)
 
     def transform(self, unit):
@@ -825,7 +807,7 @@ class UnitTransform(models.Model):
         else:
             return unit
 
-    class Meta():
+    class Meta:
         verbose_name = _('Unit Transform')
         verbose_name_plural = _('Unit Transforms')
 
@@ -833,84 +815,12 @@ class UnitTransform(models.Model):
         return "From " + self.from_unit.shortname + " to " + self.to_unit.shortname
 
 
-class CustomerGroupTransform(models.Model):
-    from_customer_group = models.ForeignKey(CustomerGroup, verbose_name=_("From Unit"),
-                                            related_name="db_reltransformfromcustomergroup")
-    to_customer_group = models.ForeignKey(CustomerGroup, verbose_name=_("To Unit"),
-                                          related_name="db_reltransformtocustomergroup")
-    product = models.ForeignKey(Product, verbose_name=_("Product"))
-    factor = models.IntegerField(verbose_name=_("Factor between From and To Customer Group"), blank=True, null=True)
-
-    def transform(self, customer_group):
-        if self.from_customer_group == customer_group:
-            return self.to_customer_group
-        else:
-            return customer_group
-
-    def __unicode__(self):
-        return "From " + self.from_customer_group.name + " to " + self.to_customer_group.name
-
-    class Meta():
-        verbose_name = _('Customer Group Price Transform')
-        verbose_name_plural = _('Customer Group Price Transforms')
-
-
-class Price(models.Model):
-    product = models.ForeignKey(Product, verbose_name=_("Product"), related_name="prices")
-    unit = models.ForeignKey(Unit, blank=False, verbose_name=_("Unit"))
-    currency = models.CharField(max_length=3, choices=currencies, blank=False, null=False, verbose_name='Currency')
-    customer_group = models.ForeignKey(CustomerGroup, blank=True, null=True, verbose_name=_("Customer Group"))
-    price = models.DecimalField(max_digits=17, decimal_places=2, verbose_name=_("Price Per Unit"))
-    validfrom = models.DateField(verbose_name=_("Valid from"), blank=True, null=True)
-    validuntil = models.DateField(verbose_name=_("Valid until"), blank=True, null=True)
-
-    def matches_date_unit_customer_group_currency(self, date, unit, customer_group, currency):
-        if self.validfrom == None:
-            if self.validuntil == None:
-                if self.customer_group == None:
-                    if (unit == self.unit) & (self.currency == currency):
-                        return 1
-                else:
-                    if (unit == self.unit) & (self.customer_group == customer_group) & (self.currency == currency):
-                        return 1
-            elif self.customer_group == None:
-                if ((date - self.validuntil).days < 0) & (unit == self.unit) & (self.currency == currency):
-                    return 1
-            else:
-                if ((date - self.validuntil).days < 0) & (unit == self.unit) & (
-                            self.customer_group == customer_group) & (
-                            self.currency == currency):
-                    return 1
-        elif self.validuntil == None:
-            if self.customer_group == None:
-                if ((self.validfrom - date).days < 0) & (unit == self.unit) & (self.currency == currency):
-                    return 1
-            else:
-                if ((self.validfrom - date).days < 0) & (unit == self.unit) & (
-                    self.customer_group == customer_group) & (
-                            self.currency == currency):
-                    return 1
-        elif self.customer_group == None:
-            if ((self.validfrom - date).days < 0) & (self.validuntil == None) & (unit == self.unit) & (
-                        self.customer_group == None) & (self.currency == currency):
-                return 1
-        else:
-            if ((self.validfrom - date).days < 0) & ((date - self.validuntil).days < 0) & (unit == self.unit) & (
-                        self.customer_group == customer_group) & (self.currency == currency):
-                return 1
-
-    class Meta():
-        verbose_name = _('Price')
-        verbose_name_plural = _('Prices')
-        get_latest_by = 'id'
-
-
 class Position(models.Model):
     position_number = models.IntegerField(verbose_name=_("Position Number"), default=0)
     quantity = models.DecimalField(verbose_name=_("Quantity"), decimal_places=3, max_digits=10)
     description = models.TextField(verbose_name=_("Description"), blank=True, null=True)
     discount = models.DecimalField(max_digits=5, decimal_places=2, verbose_name=_("Discount"), blank=True, null=True)
-    product = models.ForeignKey(Product, verbose_name=_("Product"), blank=True, null=True)
+    product = models.ForeignKey(ProductItem, verbose_name=_("Product"), blank=True, null=True)
     unit = models.ForeignKey(Unit, verbose_name=_("Unit"), blank=True, null=True)
     sent_on = models.DateField(verbose_name=_("Shipment on"), blank=True, null=True)
     supplier = models.ForeignKey(Supplier, verbose_name=_("Shipment Supplier"),
@@ -927,7 +837,7 @@ class Position(models.Model):
 
     def recalculate_prices(self, pricing_date, customer, currency):
         if not self.overwrite_product_price:
-            self.position_price_per_unit = self.product.get_price(pricing_date, self.unit, customer, currency)
+            self.position_price_per_unit = self.product.get_price()
         if type(self.discount) == Decimal:
             self.last_calculated_price = int(self.position_price_per_unit * self.quantity * (
                 1 - self.discount / 100) / currency.rounding) * currency.rounding
@@ -950,7 +860,7 @@ class Position(models.Model):
     def __unicode__(self):
         return _("Position") + ": " + str(self.id)
 
-    class Meta():
+    class Meta:
         verbose_name = _('Position')
         verbose_name_plural = _('Positions')
 
@@ -958,7 +868,7 @@ class Position(models.Model):
 class SalesContractPosition(Position):
     contract = models.ForeignKey(SalesContract, verbose_name=_("Contract"), related_name='positions')
 
-    class Meta():
+    class Meta:
         verbose_name = _('Salescontract Position')
         verbose_name_plural = _('Salescontract Positions')
 
@@ -969,7 +879,7 @@ class SalesContractPosition(Position):
 class PurchaseOrderPosition(Position):
     contract = models.ForeignKey(PurchaseOrder, verbose_name=_("Contract"))
 
-    class Meta():
+    class Meta:
         verbose_name = _('Purchaseorder Position')
         verbose_name_plural = _('Purchaseorder Positions')
 
@@ -981,7 +891,7 @@ class HTMLFile(models.Model):
     title = models.CharField(verbose_name=_("Title"), max_length=100, blank=True, null=True)
     file = FileBrowseField(verbose_name=_("HTML File"), max_length=200)
 
-    class Meta():
+    class Meta:
         verbose_name = _('HTML File')
         verbose_name_plural = _('HTML Files')
 
@@ -993,13 +903,10 @@ class TemplateSet(models.Model):
     organisationname = models.CharField(verbose_name=_("Name of the Organisation"), max_length=200)
     title = models.CharField(verbose_name=_("Title"), max_length=100)
     invoice_html_file = models.ForeignKey(HTMLFile, verbose_name=_("HTML File for Invoice"),
-                                          related_name="invoice_template",
-                                          default="pdf_templates/invoice.html")
-    quote_html_file = models.ForeignKey(HTMLFile, verbose_name=_("HTML File for Quote"), related_name="quote_template",
-                                        default="pdf_templates/quote.html")
+                                          related_name="invoice_template")
+    quote_html_file = models.ForeignKey(HTMLFile, verbose_name=_("HTML File for Quote"), related_name="quote_template")
     purchaseorder_html_file = models.ForeignKey(HTMLFile, verbose_name=_("HTML File for Purchaseorder"),
-                                                related_name="purchaseorder_template",
-                                                default="pdf_templates/purchaseorder.html")
+                                                related_name="purchaseorder_template")
     logo = FileBrowseField(verbose_name=_("Logo"), blank=True, null=True, max_length=200)
     addresser = models.CharField(max_length=200, verbose_name=_("Addresser"), blank=True, null=True)
     footer_text_salesorders = models.TextField(verbose_name=_("Footer Text On Salesorders"), blank=True, null=True)
@@ -1011,7 +918,7 @@ class TemplateSet(models.Model):
     page_footer_left = models.CharField(max_length=40, verbose_name=_("Page Footer Left"), blank=True, null=True)
     page_footer_middle = models.CharField(max_length=40, verbose_name=_("Page Footer Middle"), blank=True, null=True)
 
-    class Meta():
+    class Meta:
         verbose_name = _('Templateset')
         verbose_name_plural = _('Templatesets')
 
@@ -1025,7 +932,7 @@ class UserExtension(models.Model):
     default_templateset = models.ForeignKey(TemplateSet, null=True, blank=True)
     default_currency = models.CharField(max_length=3, choices=currencies, null=True, blank=True)
 
-    class Meta():
+    class Meta:
         verbose_name = _('User Extension')
         verbose_name_plural = _('User Extensions')
 
