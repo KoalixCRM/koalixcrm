@@ -10,7 +10,8 @@ install:
   - pip install coverage
 script:
   - python manage.py check
-#  - coverage run --source='.' manage.py test crm_core
+  - python manage.py migrate --noinput
+  - coverage run --source='.' manage.py test crm_core
   - coverage report
 after_success:
   - coveralls

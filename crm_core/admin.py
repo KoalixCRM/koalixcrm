@@ -4,11 +4,11 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from django.utils.translation import ugettext_lazy as _
-
+from cartridge.shop import models as cartridge_models
+from cartridge.shop.admin import admin as cartridge_admin
 from crm_core.models import UserExtension, Customer, Invoice, PurchaseOrder, Quote, Supplier, HTMLFile, TemplateSet, \
-    CustomerBillingCycle, CustomerGroup, Contract, Unit, TaxRate, ProductCategory, \
-    UnitTransform, ProductItem
-
+    CustomerBillingCycle, CustomerGroup, Contract, Unit, TaxRate, \
+    UnitTransform, CompanyContactData
 
 
 # Define an inline admin descriptor
@@ -31,6 +31,7 @@ admin.site.register(User, NewUserAdmin)
 
 
 class CustomerBillingCycleAdmin(admin.ModelAdmin):
+    change_list_template = 'smuggler/change_list.html'
     list_display = (u'id', 'name', 'days_to_payment')
     search_fields = ('name',)
 
@@ -39,6 +40,7 @@ admin.site.register(CustomerBillingCycle, CustomerBillingCycleAdmin)
 
 
 class CustomerGroupAdmin(admin.ModelAdmin):
+    change_list_template = 'smuggler/change_list.html'
     list_display = (u'id', 'name')
     search_fields = ('name',)
 
@@ -67,6 +69,7 @@ class CustomerAdmin(reversion.VersionAdmin):
     )
     raw_id_fields = ('ismemberof',)
     search_fields = ('name',)
+    exclude = ('lastmodifiedby',)
 
 
 admin.site.register(Customer, CustomerAdmin)
@@ -128,25 +131,16 @@ class PurchaseOrderAdmin(reversion.VersionAdmin):
         u'id',
         'contract',
         'customer',
-        'supplier',
-        'currency',
-        'last_calculated_price',
-        'last_pricing_date',
-        'derived_from_quote',
+        'validuntil',
+        'discount',
         'staff',
-        'dateofcreation',
-        'lastmodification',
         'lastmodifiedby',
     )
     list_filter = (
+        'validuntil',
         'contract',
         'customer',
-        'supplier',
-        'last_pricing_date',
-        'derived_from_quote',
         'staff',
-        'dateofcreation',
-        'lastmodification',
         'lastmodifiedby',
     )
 
@@ -161,12 +155,8 @@ class QuoteAdmin(reversion.VersionAdmin):
         'contract',
         'customer',
         'validuntil',
-        'currency',
         'discount',
-        'last_calculated_price',
-        'last_pricing_date',
         'staff',
-        'lastmodification',
         'lastmodifiedby',
     )
     list_filter = (
@@ -174,8 +164,6 @@ class QuoteAdmin(reversion.VersionAdmin):
         'contract',
         'customer',
         'staff',
-        'last_pricing_date',
-        'lastmodification',
         'lastmodifiedby',
     )
 
@@ -190,24 +178,16 @@ class InvoiceAdmin(reversion.VersionAdmin):
         'contract',
         'customer',
         'payableuntil',
-        'currency',
         'discount',
-        'last_calculated_price',
-        'last_pricing_date',
         'staff',
-        'lastmodification',
         'lastmodifiedby',
-        'derived_from_quote',
     )
     list_filter = (
         'payableuntil',
         'contract',
         'customer',
         'staff',
-        'last_pricing_date',
-        'lastmodification',
         'lastmodifiedby',
-        'derived_from_quote',
     )
 
 
@@ -215,6 +195,7 @@ admin.site.register(Invoice, InvoiceAdmin)
 
 
 class UnitAdmin(admin.ModelAdmin):
+    change_list_template = 'smuggler/change_list.html'
     list_display = (
         u'id',
         'shortname',
@@ -229,6 +210,7 @@ admin.site.register(Unit, UnitAdmin)
 
 
 class TaxRateAdmin(admin.ModelAdmin):
+    change_list_template = 'smuggler/change_list.html'
     list_display = (
         u'id',
         'name',
@@ -249,6 +231,7 @@ admin.site.register(UnitTransform, UnitTransformAdmin)
 
 
 class HTMLFileAdmin(admin.ModelAdmin):
+    change_list_template = 'smuggler/change_list.html'
     list_display = (u'id', 'title', 'file')
 
 
@@ -256,21 +239,12 @@ admin.site.register(HTMLFile, HTMLFileAdmin)
 
 
 class TemplateSetAdmin(admin.ModelAdmin):
+    change_list_template = 'smuggler/change_list.html'
     list_display = (
         u'id',
-        'organisationname',
-        'title',
         'invoice_html_file',
         'quote_html_file',
         'purchaseorder_html_file',
-        'logo',
-        'addresser',
-        'footer_text_salesorders',
-        'header_text_salesorders',
-        'header_text_purchaseorders',
-        'footer_text_purchaseorders',
-        'page_footer_left',
-        'page_footer_middle',
     )
     list_filter = (
         'invoice_html_file',
@@ -278,5 +252,13 @@ class TemplateSetAdmin(admin.ModelAdmin):
         'purchaseorder_html_file',
     )
 
-
 admin.site.register(TemplateSet, TemplateSetAdmin)
+
+
+class CompanyContactDataAdmin(admin.ModelAdmin):
+    change_list_template = 'smuggler/change_list.html'
+    list_display = (
+        'name',
+    )
+
+admin.site.register(CompanyContactData, CompanyContactDataAdmin)

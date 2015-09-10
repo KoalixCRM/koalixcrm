@@ -1,7 +1,9 @@
+from cartridge.shop.models import Product, Category
 import django_tables2 as tables
-from crm_core.custom.custom_columns import LabelColumn, ButtonsColumn, ModelDetailLinkColumn, IncludeColumn
-from crm_core.models import Contract, Customer, Supplier, ProductItem, TaxRate, CustomerBillingCycle, Unit, \
-    ProductCategory, CustomerGroup
+from crm_core.custom.custom_columns import LabelColumn, ButtonsColumn, ModelDetailLinkColumn, IncludeColumn, \
+    SafeFieldColumn, CssFieldColumn
+from crm_core.models import Contract, Customer, Supplier, TaxRate, CustomerBillingCycle, Unit, \
+    CustomerGroup
 from django.utils.translation import ugettext_lazy as _
 
 
@@ -31,7 +33,8 @@ class ContractTable(tables.Table):
             }
         ],
         attrs={"th": {"width": "90px"}},
-        orderable=False
+        orderable=False,
+        verbose_name=_('Quote')
     )
     purchase_order = ButtonsColumn(
         [
@@ -49,7 +52,8 @@ class ContractTable(tables.Table):
             }
         ],
         attrs={"th": {"width": "90px"}},
-        orderable=False
+        orderable=False,
+        verbose_name=_('Purchase Order')
     )
     invoice = ButtonsColumn(
         [
@@ -67,7 +71,8 @@ class ContractTable(tables.Table):
             }
         ],
         attrs={"th": {"width": "90px"}},
-        orderable=False
+        orderable=False,
+        verbose_name=_('Invoice')
     )
     edit_status = IncludeColumn(
         'crm_core/includes/contract_row_actions_toolbar.html',
@@ -84,9 +89,12 @@ class ContractTable(tables.Table):
 
     class Meta:
         model = Contract
-        exclude = ('id', 'staff', 'default_supplier', 'default_currency', 'dateofcreation', 'lastmodifiedby')
+        exclude = ('id', 'staff', 'default_supplier', 'default_currency', 'dateofcreation', 'lastmodifiedby',
+                   'contact_ptr', 'keywords_string', 'gen_description', 'site', 'updated',
+                   'created', 'publish_date', 'expiry_date', 'short_url', 'in_sitemap', '_meta_title',
+                   'title', 'status', 'slug')
         sequence = ('state', 'name', 'default_customer', 'description', 'price', 'lastmodification')
-        order_by = ('state', '-lastmodification')
+        order_by = ('-lastmodification', 'state')
 
 
 class CustomerTable(tables.Table):
@@ -107,7 +115,9 @@ class CustomerTable(tables.Table):
     class Meta:
         model = Customer
         exclude = ('id', 'billingcycle', 'prefix', 'dateofcreation', 'lastmodification', 'lastmodifiedby',
-                   'contact_ptr')
+                   'contact_ptr', 'keywords_string', 'description', 'gen_description', 'site', 'updated',
+                   'created', 'publish_date', 'expiry_date', 'short_url', 'in_sitemap', '_meta_title',
+                   'title', 'status', 'slug')
         sequence = ('name_prefix', 'firstname', 'name', 'default_currency')
         order_by = ('name', 'firstname')
 
@@ -124,12 +134,17 @@ class SupplierTable(tables.Table):
     class Meta:
         model = Supplier
         exclude = ('id', 'billingcycle', 'prefix', 'dateofcreation', 'lastmodification', 'lastmodifiedby',
-                   'contact_ptr')
+                   'contact_ptr', 'keywords_string', 'description', 'gen_description', 'site', 'updated',
+                   'created', 'publish_date', 'expiry_date', 'short_url', 'in_sitemap', '_meta_title',
+                   'title', 'status', 'slug')
         sequence = ('name', 'default_currency')
         order_by = ('name', )
 
 
 class ProductTable(tables.Table):
+    unit = CssFieldColumn('record.item_unit.unit', verbose_name=_('Unit'))
+    tax = CssFieldColumn('record.item_tax.tax', verbose_name=_('Taxrate'))
+    description = SafeFieldColumn('record.description')
     edit_product = IncludeColumn(
         'crm_core/includes/product_row_edit_toolbar.html',
         attrs={"th": {"width": "120px"}},
@@ -138,13 +153,12 @@ class ProductTable(tables.Table):
     )
 
     class Meta:
-        model = ProductItem
+        model = Product
         exclude = ('id', 'rating_count', 'rating_sum', 'publish_date', 'expiry_date', 'short_url', 'in_sitemap',
                    'sale_id', 'sale_price', 'sale_from', 'sale_to', 'sku', 'content', 'image', 'date_added',
                    'related_products', 'upsell_products', 'product_ptr', 'keywords_string', 'site', 'slug',
-                   'gen_description', '_meta_title', 'rating_average')
-        sequence = ('status', 'title', 'description', 'unit_price', 'item_unit', 'item_tax', 'item_category',
-                    'available', 'num_in_stock')
+                   'gen_description', '_meta_title', 'rating_average', 'created')
+        sequence = ('status', 'title', 'description', 'available', 'unit_price', 'num_in_stock', 'unit', 'tax')
         order_by = ('id', )
 
 
@@ -188,16 +202,19 @@ class UnitTable(tables.Table):
 
 
 class ProductCategoryTable(tables.Table):
-    # edit_productcategory = IncludeColumn(
-    #     'crm_core/includes/productcategory_row_edit_toolbar.html',
-    #     attrs={"th": {"width": "90px"}},
-    #     verbose_name=" ",
-    #     orderable=False
-    # )
+    edit_category = IncludeColumn(
+        'crm_core/includes/category_row_edit_toolbar.html',
+        attrs={"th": {"width": "90px"}},
+        verbose_name=" ",
+        orderable=False
+    )
 
     class Meta:
-        model = ProductCategory
-        exclude = ('id', )
+        model = Category
+        exclude = ('id', 'combined', 'in_menus', 'featured_image', 'expiry_date', 'in_sitemap', 'description',
+                   'short_url', 'publish_date', 'status', 'site', 'slug', 'created', 'updated',
+                   'gen_description', 'keywords_string', 'keywords', '_meta_title', 'titles', 'content_model',
+                   'login_required', 'parent', '_order', 'content', 'sale', 'price_max', 'price_min', 'page_ptr')
 
 
 class CustomerGroupTable(tables.Table):

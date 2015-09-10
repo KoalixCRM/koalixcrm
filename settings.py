@@ -80,10 +80,10 @@ from __future__ import absolute_import, unicode_literals
 # Controls the ordering and grouping of the admin menu.
 #
 ADMIN_MENU_ORDER = (
-    ("Content", ("pages.Page", ("Media Library", "fb_browse"),)),
-    ("Users", ("auth.User", "auth.Group", )),
-    ("Site", ("sites.Site", "redirects.Redirect", "conf.Setting", "business_theme.SitewideContent")),
-    ("Blog", ("blog.BlogPost", "generic.ThreadedComment", )),
+    ("Content", ("pages.Page", "blog.BlogPost", "generic.ThreadedComment", ("Media Library", "fb_browse"),)),
+    ("Site", ("auth.User", "auth.Group", "sites.Site", "redirects.Redirect", "conf.Setting",
+              # "business_theme.SitewideContent"
+              )),
 )
 
 # A three item sequence, each containing a sequence of template tags
@@ -135,8 +135,6 @@ DASHBOARD_TAGS = (
 USE_SOUTH = False
 
 SITE_TITLE = 'Koalix CRM'
-
-GRAPPELLI_ADMIN_TITLE = SITE_TITLE
 
 
 ########################
@@ -258,6 +256,10 @@ DATABASES = {
     }
 }
 
+MIGRATION_MODULES = {
+    "shop": "crm_core.migrations.shop",
+}
+
 
 #########
 # PATHS #
@@ -289,11 +291,11 @@ STATIC_ROOT = os.path.join(PROJECT_ROOT, STATIC_URL.strip("/"))
 # URL that handles the media served from MEDIA_ROOT. Make sure to use a
 # trailing slash.
 # Examples: "http://media.lawrence.com/media/", "http://example.com/media/"
-MEDIA_URL = STATIC_URL + "media/"
+MEDIA_URL = os.path.join(STATIC_URL, "media/")
 
 # Absolute filesystem path to the directory that will hold user-uploaded files.
 # Example: "/home/media/media.lawrence.com/media/"
-MEDIA_ROOT = os.path.join(PROJECT_ROOT, *MEDIA_URL.strip("/").split("/"))
+MEDIA_ROOT = os.path.join(STATIC_ROOT, "media")
 
 # Package/module name to import the root urlpatterns from for the project.
 ROOT_URLCONF = "%s.urls" % PROJECT_DIRNAME
@@ -304,7 +306,7 @@ ROOT_URLCONF = "%s.urls" % PROJECT_DIRNAME
 # Don't forget to use absolute paths, not relative paths.
 TEMPLATE_DIRS = (
     os.path.join(PROJECT_ROOT, "crm_core/templates"),
-    # os.path.join(PROJECT_ROOT, "templates"),
+    os.path.join(PROJECT_ROOT, "templates"),
 )
 
 
@@ -334,10 +336,10 @@ INSTALLED_APPS = (
     "django_utils",
     "braces",
     "extra_views",
+    "ajax_select",
 
     "international",
-    "po_localization",
-
+    "solo",
     "smuggler",
     "django_fsm",
     "reversion",
@@ -366,6 +368,7 @@ TEMPLATE_CONTEXT_PROCESSORS = (
     "django.core.context_processors.request",
     "django.core.context_processors.tz",
     "mezzanine.conf.context_processors.settings",
+    "mezzanine.pages.context_processors.page",
 )
 
 # List of middleware classes to use. Order is important; in the request phase,
@@ -380,7 +383,6 @@ MIDDLEWARE_CLASSES = (
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
-    "po_localization.middleware.PoLocalizationMiddleware",
     "cartridge.shop.middleware.ShopMiddleware",
     "mezzanine.core.request.CurrentRequestMiddleware",
     "mezzanine.core.middleware.TemplateForDeviceMiddleware",
@@ -398,7 +400,9 @@ MIDDLEWARE_CLASSES = (
 PACKAGE_NAME_FILEBROWSER = "filebrowser_safe"
 PACKAGE_NAME_GRAPPELLI = "grappelli_safe"
 
+CRISPY_FAIL_SILENTLY = not DEBUG
 CRISPY_TEMPLATE_PACK = "bootstrap3"
+
 
 #########################
 # OPTIONAL APPLICATIONS #
@@ -415,6 +419,12 @@ OPTIONAL_APPS = (
 SEARCH_MODEL_CHOICES = None
 SHOP_OPTION_TYPE_CHOICES = ((1, 'Size'), (2, 'Colour'))
 SHOP_ORDER_STATUS_CHOICES = ((1, 'Unprocessed'), (2, 'Processed'))
+SHOP_USE_VARIATIONS = False
+
+AJAX_LOOKUP_CHANNELS = {
+    'unit': {'model': 'crm_core.models.QuotePosition', 'search_field': 'product'},
+    'unit_price': {'model': 'crm_core.models.QuotePosition', 'search_field': 'product'},
+}
 
 
 ##################
